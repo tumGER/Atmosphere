@@ -10,6 +10,7 @@
 #include "ldr_debug_monitor.hpp"
 #include "ldr_shell.hpp"
 #include "ldr_ro_service.hpp"
+#include "ldr_sd_card.hpp"
 
 extern "C" {
     extern u32 __start__;
@@ -81,7 +82,14 @@ int main(int argc, char **argv)
     /* TODO: What's a good timeout value to use here? */
     WaitableManager *server_manager = new WaitableManager(U64_MAX);
     
+    IWaitable *sd_card_event = NULL;
+    
+    if (R_FAILED(SdCardUtils::GetSdCardEvent(&sd_card_event))) {
+        /* TODO: Panic. */
+    }
+    
     /* Add services to manager. */
+    server_manager->add_waitable(sd_card_event);
     server_manager->add_waitable(new ServiceServer<ProcessManagerService>("ldr:pm", 1));
     server_manager->add_waitable(new ServiceServer<ShellService>("ldr:shel", 3));
     server_manager->add_waitable(new ServiceServer<DebugMonitorService>("ldr:dmnt", 2));
