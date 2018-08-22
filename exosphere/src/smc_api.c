@@ -25,6 +25,7 @@
 #define SMC_PRIV_HANDLERS 0x9
 
 #define DEBUG_LOG_SMCS 0
+#define DEBUG_PANIC_ON_FAILURE 0
 
 /* User SMC prototypes */
 uint32_t smc_set_config(smc_args_t *args);
@@ -121,6 +122,11 @@ static atomic_flag g_is_priv_smc_in_progress = ATOMIC_FLAG_INIT;
 /* Global for smc_configure_carveout. */
 static bool g_configured_carveouts[2] = {false, false};
 
+static bool g_has_suspended = false;
+void set_suspend_for_debug(void) {
+    g_has_suspended = true;
+}
+
 void set_version_specific_smcs(void) {
     switch (exosphere_get_target_firmware()) {
         case EXOSPHERE_TARGET_FIRMWARE_100:
@@ -207,7 +213,7 @@ void call_smc_handler(uint32_t handler_id, smc_args_t *args) {
     unsigned char smc_id;
     unsigned int result;
     unsigned int (*smc_handler)(smc_args_t *args);
-
+    
     /* Validate top-level handler. */
     if (handler_id != SMC_HANDLER_USER && handler_id != SMC_HANDLER_PRIV) {
         generic_panic();
@@ -255,6 +261,7 @@ void call_smc_handler(uint32_t handler_id, smc_args_t *args) {
     }
 #endif
     
+#if DEBUG_PANIC_ON_FAILURE
     if (args->X[0] && (!is_aes_kek || args->X[3] <= EXOSPHERE_TARGET_FIRMWARE_DEFAULT_FOR_DEBUG)) 
     {
         MAKE_REG32(get_iram_address_for_debug() + 0x4FF0) = handler_id;
@@ -263,6 +270,9 @@ void call_smc_handler(uint32_t handler_id, smc_args_t *args) {
         *(volatile smc_args_t *)(get_iram_address_for_debug() + 0x4F00) = *args;
         panic(PANIC_REBOOT);
     }
+#else
+    (void)(is_aes_kek);
+#endif
     (void)result; /* FIXME: result unused */
 }
 
@@ -631,8 +641,10 @@ uint32_t smc_configure_carveout(smc_args_t *args) {
     }
 
     /* Configuration is one-shot, and cannot be done multiple times. */
-    if (g_configured_carveouts[carveout_id]) {
-        return 2;
+    if (exosphere_get_target_firmware() < EXOSPHERE_TARGET_FIRMWARE_300) { 
+        if (g_configured_carveouts[carveout_id]) {
+            return 2;
+        }
     }
 
     configure_kernel_carveout(carveout_id + 4, address, size);
