@@ -27,67 +27,7 @@
 #undef u8
 #undef u32
 
-/* Save security engine, and go to sleep. */
-void save_se_and_power_down_cpu(void) {
-    uint32_t tzram_cmac[0x4] = {0};
-
-    uint8_t *tzram_encryption_dst = (uint8_t *)(LP0_ENTRY_GET_RAM_SEGMENT_ADDRESS(LP0_ENTRY_RAM_SEGMENT_ID_ENCRYPTED_TZRAM));
-    uint8_t *tzram_encryption_src = (uint8_t *)(LP0_ENTRY_GET_RAM_SEGMENT_ADDRESS(LP0_ENTRY_RAM_SEGMENT_ID_CURRENT_TZRAM));
-    uint8_t *tzram_store_address = (uint8_t *)(WARMBOOT_GET_RAM_SEGMENT_ADDRESS(WARMBOOT_RAM_SEGMENT_ID_TZRAM));
-    clear_priv_smc_in_progress();
-
-    /* Flush cache. */
-    flush_dcache_all();
-
-    /* Encrypt and save TZRAM into DRAM using a random aes-256 key. */
-    se_generate_random_key(KEYSLOT_SWITCH_LP0TZRAMKEY, KEYSLOT_SWITCH_RNGKEY);
-
-    flush_dcache_range(tzram_encryption_dst, tzram_encryption_dst + LP0_TZRAM_SAVE_SIZE);
-    flush_dcache_range(tzram_encryption_src, tzram_encryption_src + LP0_TZRAM_SAVE_SIZE);
-
-    /* Use the all-zero cmac buffer as an IV. */
-    se_aes_256_cbc_encrypt(KEYSLOT_SWITCH_LP0TZRAMKEY, tzram_encryption_dst, LP0_TZRAM_SAVE_SIZE, tzram_encryption_src, LP0_TZRAM_SAVE_SIZE, tzram_cmac);
-    flush_dcache_range(tzram_encryption_dst, tzram_encryption_dst + LP0_TZRAM_SAVE_SIZE);
-
-    /* Copy encrypted TZRAM from IRAM to DRAM. */
-    memcpy(tzram_store_address, tzram_encryption_dst, LP0_TZRAM_SAVE_SIZE);
-    flush_dcache_range(tzram_store_address, tzram_store_address + LP0_TZRAM_SAVE_SIZE);
-
-    /* Compute CMAC. */
-    se_compute_aes_256_cmac(KEYSLOT_SWITCH_LP0TZRAMKEY, tzram_cmac, sizeof(tzram_cmac), tzram_encryption_src, LP0_TZRAM_SAVE_SIZE);
-
-    /* Write CMAC, lock registers. */
-    APBDEV_PMC_SECURE_SCRATCH112_0 = tzram_cmac[0];
-    APBDEV_PMC_SECURE_SCRATCH113_0 = tzram_cmac[1];
-    APBDEV_PMC_SECURE_SCRATCH114_0 = tzram_cmac[2];
-    APBDEV_PMC_SECURE_SCRATCH115_0 = tzram_cmac[3];
-    APBDEV_PMC_SEC_DISABLE8_0 = 0x550000;
-
-    /* Save security engine state. */
-    uint8_t *se_state_dst = (uint8_t *)(WARMBOOT_GET_RAM_SEGMENT_ADDRESS(WARMBOOT_RAM_SEGMENT_ID_SE_STATE));
-    se_check_error_status_reg();
-    se_set_in_context_save_mode(true);
-    se_save_context(KEYSLOT_SWITCH_SRKGENKEY, KEYSLOT_SWITCH_RNGKEY, se_state_dst);
-    flush_dcache_range(se_state_dst, se_state_dst + 0x840);
-    APBDEV_PMC_SCRATCH43_0 = (uint32_t)(WARMBOOT_GET_RAM_SEGMENT_PA(WARMBOOT_RAM_SEGMENT_ID_SE_STATE));
-    se_set_in_context_save_mode(false);
-    se_check_error_status_reg();
-
-    if (!configitem_is_retail()) {
-        /* TODO: uart_log("OYASUMI"); */
-    }
-
-    finalize_powerdown();
-}
-
-uint32_t cpu_suspend(uint64_t power_state, uint64_t entrypoint, uint64_t argument) {
-    /* Ensure SMC call is to enter deep sleep. */
-    if ((power_state & 0x17FFF) != 0x1001B) {
-        return 0xFFFFFFFD;
-    }
-
-    unsigned int current_core = get_core_id();
-
+static void configure_battery_hi_z_mode(void) {
     clkrst_reboot(CARDEVICE_I2C1);
 
     if (configitem_should_profile_battery() && !i2c_query_ti_charger_bit_7()) {
@@ -107,20 +47,25 @@ uint32_t cpu_suspend(uint64_t power_state, uint64_t entrypoint, uint64_t argumen
         }
     }
     clkrst_disable(CARDEVICE_I2C1);
+}
 
-    /* Enable LP0 Wake Event Detection. */
+static void enable_lp0_wake_events(void) {
     wait(75);
     APBDEV_PMC_CNTRL2_0 |= 0x200; /* Set WAKE_DET_EN. */
     wait(75);
     APBDEV_PM_0 = 0xFFFFFFFF; /* Set all wake events. */
     APBDEV_PMC_WAKE2_STATUS_0 = 0xFFFFFFFF; /* Set all wake events. */
     wait(75);
+}
 
+static void notify_pmic_shutdown(void) {
     clkrst_reboot(CARDEVICE_I2C5);
     if (fuse_get_bootrom_patch_version() >= 0x7F) {
         i2c_send_pmic_cpu_shutdown_cmd();
     }
+}
 
+static void mitigate_jamais_vu(void) {
     /* Jamais Vu mitigation #1: Ensure all other cores are off. */
     if (APBDEV_PMC_PWRGATE_STATUS_0 & 0xE00) {
         generic_panic();
@@ -150,13 +95,14 @@ uint32_t cpu_suspend(uint64_t power_state, uint64_t entrypoint, uint64_t argumen
     if ((CLK_RST_CONTROLLER_RST_DEVICES_H_0 & 0x4000004) != 0x4000004) {
         generic_panic();
     }
+}
 
-    /* Signal to bootrom the next reset should be a warmboot. */
+static void configure_pmc_for_deep_powerdown(void) {
     APBDEV_PMC_SCRATCH0_0 = 1;
     APBDEV_PMC_DPD_ENABLE_0 |= 2;
+}
 
-    /* Prepare to boot the BPMP running our deep sleep firmware. */
-
+static void setup_bpmp_sc7_firmware(void) {
     /* Mark PMC registers as not secure-world only, so BPMP can access them. */
     APB_MISC_SECURE_REGS_APB_SLAVE_SECURITY_ENABLE_REG0_0 &= 0xFFFFDFFF;
 
@@ -169,13 +115,16 @@ uint32_t cpu_suspend(uint64_t power_state, uint64_t entrypoint, uint64_t argumen
     BPMP_VECTOR_UNK = 0x40003004; /* Reboot. */
     BPMP_VECTOR_IRQ = 0x40003004; /* Reboot. */
     BPMP_VECTOR_FIQ = 0x40003004; /* Reboot. */
-
+    
     /* Hold the BPMP in reset. */
     MAKE_CAR_REG(0x300) = 2;
 
     /* Copy BPMP firmware. */
     uint8_t *lp0_entry_code = (uint8_t *)(LP0_ENTRY_GET_RAM_SEGMENT_ADDRESS(LP0_ENTRY_RAM_SEGMENT_ID_LP0_ENTRY_CODE));
-    memcpy(lp0_entry_code, bpmpfw_bin, bpmpfw_bin_size);
+    for (unsigned int i = 0; i < bpmpfw_bin_size; i += 4) {
+        write32le(lp0_entry_code, i, read32le(bpmpfw_bin, i));
+    }
+        
     flush_dcache_range(lp0_entry_code, lp0_entry_code + bpmpfw_bin_size);
 
     /* Take the BPMP out of reset. */
@@ -183,17 +132,151 @@ uint32_t cpu_suspend(uint64_t power_state, uint64_t entrypoint, uint64_t argumen
 
     /* Start executing BPMP firmware. */
     FLOW_CTLR_HALT_COP_EVENTS_0 = 0;
-    /* Prepare the current core for sleep. */
+}
+
+static void configure_flow_regs_for_sleep(void) {
+    unsigned int current_core = get_core_id();
     flow_set_cc4_ctrl(current_core, 0);
     flow_set_halt_events(current_core, false);
     FLOW_CTLR_L2FLUSH_CONTROL_0 = 0;
     flow_set_csr(current_core, 2);
+}
 
+static void save_tzram_state(void) {
+    /* TODO: Remove set suspend call once exo warmboots fully */
+    set_suspend_for_debug();
+    uint32_t tzram_cmac[0x4] = {0};
+
+    uint8_t *tzram_encryption_dst = (uint8_t *)(LP0_ENTRY_GET_RAM_SEGMENT_ADDRESS(LP0_ENTRY_RAM_SEGMENT_ID_ENCRYPTED_TZRAM));
+    uint8_t *tzram_encryption_src = (uint8_t *)(LP0_ENTRY_GET_RAM_SEGMENT_ADDRESS(LP0_ENTRY_RAM_SEGMENT_ID_CURRENT_TZRAM));
+    if (exosphere_get_target_firmware() >= EXOSPHERE_TARGET_FIRMWARE_500) {
+        tzram_encryption_src += 0x2000ull;
+    }
+    uint8_t *tzram_store_address = (uint8_t *)(WARMBOOT_GET_RAM_SEGMENT_ADDRESS(WARMBOOT_RAM_SEGMENT_ID_TZRAM));
+    clear_priv_smc_in_progress();
+
+    /* Flush cache. */
+    flush_dcache_all();
+
+    /* Encrypt and save TZRAM into DRAM using a random aes-256 key. */
+    se_generate_random_key(KEYSLOT_SWITCH_LP0TZRAMKEY, KEYSLOT_SWITCH_RNGKEY);
+
+    flush_dcache_range(tzram_encryption_dst, tzram_encryption_dst + LP0_TZRAM_SAVE_SIZE);
+    flush_dcache_range(tzram_encryption_src, tzram_encryption_src + LP0_TZRAM_SAVE_SIZE);
+
+    /* Use the all-zero cmac buffer as an IV. */    
+    se_aes_256_cbc_encrypt(KEYSLOT_SWITCH_LP0TZRAMKEY, tzram_encryption_dst, LP0_TZRAM_SAVE_SIZE, tzram_encryption_src, LP0_TZRAM_SAVE_SIZE, tzram_cmac);
+    flush_dcache_range(tzram_encryption_dst, tzram_encryption_dst + LP0_TZRAM_SAVE_SIZE);
+
+    /* Copy encrypted TZRAM from IRAM to DRAM. */
+    for (unsigned int i = 0; i < LP0_TZRAM_SAVE_SIZE; i += 4) {
+        write32le(tzram_store_address, i, read32le(tzram_encryption_dst, i));
+    }
+    
+    flush_dcache_range(tzram_store_address, tzram_store_address + LP0_TZRAM_SAVE_SIZE);
+
+    /* Compute CMAC. */
+    se_compute_aes_256_cmac(KEYSLOT_SWITCH_LP0TZRAMKEY, tzram_cmac, sizeof(tzram_cmac), tzram_encryption_src, LP0_TZRAM_SAVE_SIZE);
+    
+    /* Write CMAC, lock registers. */
+    APBDEV_PMC_SECURE_SCRATCH112_0 = tzram_cmac[0];
+    APBDEV_PMC_SECURE_SCRATCH113_0 = tzram_cmac[1];
+    APBDEV_PMC_SECURE_SCRATCH114_0 = tzram_cmac[2];
+    APBDEV_PMC_SECURE_SCRATCH115_0 = tzram_cmac[3];
+    APBDEV_PMC_SEC_DISABLE8_0 = 0x550000;
+
+    /* Perform pre-2.0.0 PMC writes. */
+    if (exosphere_get_target_firmware() < EXOSPHERE_TARGET_FIRMWARE_200) {
+        /* TODO: Give these writes appropriate defines in pmc.h */
+
+        /* Save Encrypted context location + lock scratch register. */
+        MAKE_REG32(PMC_BASE + 0x360) = WARMBOOT_GET_RAM_SEGMENT_PA(WARMBOOT_RAM_SEGMENT_ID_TZRAM);
+        MAKE_REG32(PMC_BASE + 0x2D8) = 0x10000;
+
+        /* Save Encryption parameters (where to copy TZRAM to, source, destination, size) */
+        MAKE_REG32(PMC_BASE + 0x340) = LP0_ENTRY_GET_RAM_SEGMENT_PA(LP0_ENTRY_RAM_SEGMENT_ID_CURRENT_TZRAM);
+        MAKE_REG32(PMC_BASE + 0x344) = 0;
+        MAKE_REG32(PMC_BASE + 0x348) = LP0_ENTRY_GET_RAM_SEGMENT_PA(LP0_ENTRY_RAM_SEGMENT_ID_CURRENT_TZRAM);
+        MAKE_REG32(PMC_BASE + 0x34C) = 0;
+        MAKE_REG32(PMC_BASE + 0x350) = LP0_ENTRY_GET_RAM_SEGMENT_PA(LP0_ENTRY_RAM_SEGMENT_ID_CURRENT_TZRAM);
+        MAKE_REG32(PMC_BASE + 0x354) = LP0_TZRAM_SAVE_SIZE;
+
+        /* Lock scratch registers. */
+        MAKE_REG32(PMC_BASE + 0x2D8) = 0x555;
+    }
+}
+
+static void save_se_state(void) {
+    /* Save security engine state. */
+    uint8_t *se_state_dst = (uint8_t *)(WARMBOOT_GET_RAM_SEGMENT_ADDRESS(WARMBOOT_RAM_SEGMENT_ID_SE_STATE));
+    se_check_error_status_reg();
+    se_set_in_context_save_mode(true);
+    se_save_context(KEYSLOT_SWITCH_SRKGENKEY, KEYSLOT_SWITCH_RNGKEY, se_state_dst);
+    flush_dcache_range(se_state_dst, se_state_dst + 0x840);
+    APBDEV_PMC_SCRATCH43_0 = (uint32_t)(WARMBOOT_GET_RAM_SEGMENT_PA(WARMBOOT_RAM_SEGMENT_ID_SE_STATE));
+    se_set_in_context_save_mode(false);
+    se_check_error_status_reg();
+}
+
+/* Save security engine, and go to sleep. */
+void save_se_and_power_down_cpu(void) {
+    /* Save context for warmboot to restore. */
+    save_tzram_state();
+    save_se_state();
+
+    if (!configitem_is_retail()) {
+        /* TODO: uart_log("OYASUMI"); */
+    }
+    
+    __dsb_sy();
+
+    finalize_powerdown();
+}
+
+uint32_t cpu_suspend(uint64_t power_state, uint64_t entrypoint, uint64_t argument) {
+    /* Ensure SMC call is to enter deep sleep. */
+    if ((power_state & 0x17FFF) != 0x1001B) {
+        return 0xFFFFFFFD;
+    }
+
+    /* Perform I2C comms with TI charger if required. */
+    configure_battery_hi_z_mode();
+
+    /* Enable LP0 Wake Event Detection. */
+    enable_lp0_wake_events();
+
+    /* Alert the PMC of an iminent shutdown. */
+    notify_pmic_shutdown();
+
+    /* Validate that the shutdown has correct context. */
+    if (exosphere_get_target_firmware() >= EXOSPHERE_TARGET_FIRMWARE_200) {
+        mitigate_jamais_vu();
+    }
+
+    /* Signal to bootrom the next reset should be a warmboot. */
+    configure_pmc_for_deep_powerdown();
+
+    /* Ensure that BPMP SC7 firmware is active. */
+    if (exosphere_get_target_firmware() >= EXOSPHERE_TARGET_FIRMWARE_200) {
+        setup_bpmp_sc7_firmware();
+    }
+
+    /* Prepare the current core for sleep. */
+    configure_flow_regs_for_sleep();
+    
     /* Save core context. */
-    set_core_entrypoint_and_argument(current_core, entrypoint, argument);
+    set_core_entrypoint_and_argument(get_core_id(), entrypoint, argument);
     save_current_core_context();
     set_current_core_inactive();
-    call_with_stack_pointer(get_smc_core012_stack_address(), save_se_and_power_down_cpu);
+
+    /* Ensure that other cores are already asleep. */
+    if (!(APBDEV_PMC_PWRGATE_STATUS_0 & 0xE00)) {
+        if (exosphere_get_target_firmware() >= EXOSPHERE_TARGET_FIRMWARE_200) {
+            call_with_stack_pointer(get_smc_core012_stack_address(), save_se_and_power_down_cpu);
+        } else {
+            save_se_and_power_down_cpu();
+        }
+    }
 
     generic_panic();
 }
