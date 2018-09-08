@@ -1,3 +1,20 @@
+/*
+ * Copyright (c) 2018 naehrwert
+ * Copyright (c) 2018 Atmosphère-NX
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU General Public License,
+ * version 2, as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
 #include "mc.h"
 #include "car.h"
 #include "timers.h"
@@ -20,7 +37,7 @@ void mc_config_carveout()
     MAKE_MC_REG(MC_VIDEO_PROTECT_SIZE_MB) = 0;
     MAKE_MC_REG(MC_VIDEO_PROTECT_REG_CTRL) = 1;
 
-    mc_config_tsec_carveout(0, 0, 1);
+    mc_config_tsec_carveout(0, 0, true);
 
     MAKE_MC_REG(MC_MTS_CARVEOUT_BOM) = 0;
     MAKE_MC_REG(MC_MTS_CARVEOUT_SIZE_MB) = 0;

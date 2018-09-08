@@ -1,3 +1,21 @@
+/*
+ * Copyright (c) 2018 naehrwert
+ * Copyright (c) 2018 CTCaer
+ * Copyright (c) 2018 Atmosphère-NX
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU General Public License,
+ * version 2, as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
 #include <string.h>
 
 #include "di.h"
@@ -36,9 +54,9 @@ void display_init()
     
     /* Power on. */
     uint8_t val = 0xD0;
-    i2c_send(4, 0x3C, MAX77620_REG_LDO0_CFG, &val, 1);
+    i2c_send(I2C_5, MAX77620_PWR_I2C_ADDR, MAX77620_REG_LDO0_CFG, &val, 1);
     val = 0x09;
-    i2c_send(4, 0x3C, MAX77620_REG_GPIO7, &val, 1);
+    i2c_send(I2C_5, MAX77620_PWR_I2C_ADDR, MAX77620_REG_GPIO7, &val, 1);
     
     /* Enable MIPI CAL, DSI, DISP1, HOST1X, UART_FST_MIPI_CAL, DSIA LP clocks. */
     car->rst_dev_h_clr = 0x1010000;
@@ -70,7 +88,7 @@ void display_init()
     /* Enable Backlight +5V. */
     gpio_write(GPIO_LCD_BL_P5V, GPIO_LEVEL_HIGH); 
 
-    udelay(10000u);
+    udelay(10000);
 
     /* Enable Backlight -5V. */
     gpio_write(GPIO_LCD_BL_N5V, GPIO_LEVEL_HIGH); 
@@ -165,12 +183,7 @@ void display_end()
     MAKE_DSI_REG(DSI_VIDEO_MODE_CONTROL) = 1;
     MAKE_DSI_REG(DSI_WR_DATA) = 0x2805;
 
-    uint32_t host1x_delay = MAKE_HOST1X_REG(0x30A4) + 5;
-    while (MAKE_HOST1X_REG(0x30A4) < host1x_delay) {
-        /* Wait. */
-    }
-
-    MAKE_DI_REG(DC_CMD_STATE_ACCESS) = 5;
+    MAKE_DI_REG(DC_CMD_STATE_ACCESS) = (READ_MUX | WRITE_MUX);
     MAKE_DSI_REG(DSI_VIDEO_MODE_CONTROL) = 0;
 
     exec_cfg((uint32_t *)DI_BASE, _display_config_12, 17);
@@ -182,7 +195,7 @@ void display_end()
         exec_cfg((uint32_t *)DSI_BASE, _display_config_14, 22);
 
     MAKE_DSI_REG(DSI_WR_DATA) = 0x1005;
-    MAKE_DSI_REG(DSI_TRIGGER) = 2;
+    MAKE_DSI_REG(DSI_TRIGGER) = DSI_TRIGGER_HOST;
 
     udelay(50000);
     
@@ -207,7 +220,7 @@ void display_end()
     car->rst_dev_l_set = 0x18000000;
     car->clk_enb_l_clr = 0x18000000;
 
-    MAKE_DSI_REG(DSI_PAD_CONTROL_0) = 0x10F010F;
+    MAKE_DSI_REG(DSI_PAD_CONTROL_0) = (DSI_PAD_CONTROL_VS1_PULLDN_CLK | DSI_PAD_CONTROL_VS1_PULLDN(0xF) | DSI_PAD_CONTROL_VS1_PDIO_CLK | DSI_PAD_CONTROL_VS1_PDIO(0xF));
     MAKE_DSI_REG(DSI_POWER_CONTROL) = 0;
     
     /* Backlight PWM. */
@@ -236,17 +249,16 @@ void display_color_screen(uint32_t color)
 uint32_t *display_init_framebuffer(void *address)
 {
     static cfg_op_t conf[sizeof(cfg_display_framebuffer)/sizeof(cfg_op_t)] = {0};
-    if(conf[0].val == 0) {
+    if (conf[0].val == 0) {
         for (uint32_t i = 0; i < sizeof(cfg_display_framebuffer)/sizeof(cfg_op_t); i++) {
             conf[i] = cfg_display_framebuffer[i];
         }
     }
 
     uint32_t *lfb_addr = (uint32_t *)address;
-
     conf[19].val = (uint32_t)address;
     
-    //This configures the framebuffer @ address with a resolution of 1280x720 (line stride 768).
+    /* This configures the framebuffer @ address with a resolution of 1280x720 (line stride 768). */
     exec_cfg((uint32_t *)DI_BASE, conf, 32);
 
     udelay(35000);

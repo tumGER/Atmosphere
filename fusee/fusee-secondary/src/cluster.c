@@ -1,3 +1,20 @@
+/*
+ * Copyright (c) 2018 naehrwert
+ * Copyright (c) 2018 Atmosphère-NX
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU General Public License,
+ * version 2, as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
 #include <stdint.h>
  
 #include "cluster.h"
@@ -12,22 +29,22 @@
 void _cluster_enable_power()
 {
     uint8_t val = 0;
-    i2c_query(4, 0x3C, MAX77620_REG_AME_GPIO, &val, 1);
+    i2c_query(I2C_5, MAX77620_PWR_I2C_ADDR, MAX77620_REG_AME_GPIO, &val, 1);
     
     val &= 0xDF;
-    i2c_send(4, 0x3C, MAX77620_REG_AME_GPIO, &val, 1);
+    i2c_send(I2C_5, MAX77620_PWR_I2C_ADDR, MAX77620_REG_AME_GPIO, &val, 1);
     val = 0x09;
-    i2c_send(4, 0x3C, MAX77620_REG_GPIO5, &val, 1);
+    i2c_send(I2C_5, MAX77620_PWR_I2C_ADDR, MAX77620_REG_GPIO5, &val, 1);
     
     /* Enable power. */
     val = 0x20;
-    i2c_send(4, 0x1B, MAX77620_REG_CNFGGLBL3, &val, 1);
+    i2c_send(I2C_5, MAX77621_CPU_I2C_ADDR, 0x02, &val, 1);
     val = 0x8D;
-    i2c_send(4, 0x1B, MAX77620_REG_CNFG1_32K, &val, 1);
+    i2c_send(I2C_5, MAX77621_CPU_I2C_ADDR, 0x03, &val, 1);
     val = 0xB7;
-    i2c_send(4, 0x1B, MAX77620_REG_CNFGGLBL1, &val, 1);
+    i2c_send(I2C_5, MAX77621_CPU_I2C_ADDR, 0x00, &val, 1);
     val = 0xB7;
-    i2c_send(4, 0x1B, MAX77620_REG_CNFGGLBL2, &val, 1);
+    i2c_send(I2C_5, MAX77621_CPU_I2C_ADDR, 0x01, &val, 1);
 }
 
 int _cluster_pmc_enable_partition(uint32_t part, uint32_t toggle)
@@ -77,12 +94,12 @@ void cluster_boot_cpu0(uint32_t entry)
         udelay(2);
         car->pllx_base = 0x80404E02;
         car->pllx_base = 0x404E02;
-        car->pllx_misc = ((car->pllx_base & 0xFFFBFFFF) | 0x40000);
+        car->pllx_misc = ((car->pllx_misc & 0xFFFBFFFF) | 0x40000);
         car->pllx_base = 0x40404E02;
     }
     
     while (!(car->pllx_base & 0x8000000)) {
-        /* Spinlock. */
+        /* Wait. */
     }
 
     /* Configure MSELECT source and enable clock. */
@@ -110,14 +127,14 @@ void cluster_boot_cpu0(uint32_t entry)
 
     /* Request and wait for RAM repair. */
     FLOW_CTLR_RAM_REPAIR_0 = 1;
-    while (!(FLOW_CTLR_RAM_REPAIR_0 & 2)){
-        /* Spinlock. */
+    while (!(FLOW_CTLR_RAM_REPAIR_0 & 2)) {
+        /* Wait. */
     }
 
     MAKE_EXCP_VEC_REG(0x100) = 0;
 
     /* Set reset vector. */
-    SB_AA64_RESET_LOW_0 = entry | 1;
+    SB_AA64_RESET_LOW_0 = (entry | 1);
     SB_AA64_RESET_HIGH_0 = 0;
     
     /* Non-secure reset vector write disable. */

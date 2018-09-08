@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2018 Atmosphère-NX
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU General Public License,
+ * version 2, as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
 #ifndef FUSEE_I2C_H
 #define FUSEE_I2C_H
 
@@ -7,6 +23,20 @@
 
 #define I2C234_BASE 0x7000C000
 #define I2C56_BASE 0x7000D000
+
+#define I2C_1 0
+#define I2C_2 1
+#define I2C_3 2
+#define I2C_4 3
+#define I2C_5 4
+#define I2C_6 5
+
+#define MAX77621_CPU_I2C_ADDR       0x1B
+#define MAX77621_GPU_I2C_ADDR       0x1C
+#define MAX17050_I2C_ADDR           0x36
+#define MAX77620_PWR_I2C_ADDR       0x3C
+#define MAX77620_RTC_I2C_ADDR       0x68
+#define BQ24193_I2C_ADDR            0x6B
 
 typedef struct {
     uint32_t I2C_I2C_CNFG_0;

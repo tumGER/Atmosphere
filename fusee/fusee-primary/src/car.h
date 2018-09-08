@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2018 Atmosphère-NX
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU General Public License,
+ * version 2, as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
 #ifndef FUSEE_CAR_H
 #define FUSEE_CAR_H
 
@@ -224,16 +240,16 @@ typedef struct {
     uint32_t clk_cpu_cmplx_clr;         /* _CLK_CPU_CMPLX_SET_0,    0x34c */
 
     uint32_t _0x350[2];
-    uint32_t rst_dev_v;                 /* _RST_DEVICES_V/W_0 */
-    uint32_t rst_dev_w;                 /* _RST_DEVICES_V/W_0 */
-    uint32_t clk_out_enb_v;             /* _CLK_OUT_ENB_V/W_0 */
-    uint32_t clk_out_enb_w;             /* _CLK_OUT_ENB_V/W_0 */
+    uint32_t rst_dev_v;                 /* _RST_DEVICES_V_0,        0x358 */
+    uint32_t rst_dev_w;                 /* _RST_DEVICES_W_0,        0x35c */
+    uint32_t clk_out_enb_v;             /* _CLK_OUT_ENB_V_0,        0x360 */
+    uint32_t clk_out_enb_w;             /* _CLK_OUT_ENB_W_0,        0x364 */
     uint32_t cclkg_brst_pol;            /* _CCLKG_BURST_POLICY_0,   0x368 */
-    uint32_t super_cclkg_div;           /* _SUPER_CCLKG_DIVIDER_0,  0x36C */
+    uint32_t super_cclkg_div;           /* _SUPER_CCLKG_DIVIDER_0,  0x36c */
     uint32_t cclklp_brst_pol;           /* _CCLKLP_BURST_POLICY_0,  0x370 */
     uint32_t super_cclkp_div;           /* _SUPER_CCLKLP_DIVIDER_0, 0x374 */
     uint32_t clk_cpug_cmplx;            /* _CLK_CPUG_CMPLX_0,       0x378 */
-    uint32_t clk_cpulp_cmplx;           /* _CLK_CPULP_CMPLX_0,      0x37C */
+    uint32_t clk_cpulp_cmplx;           /* _CLK_CPULP_CMPLX_0,      0x37c */
     uint32_t cpu_softrst_ctrl;          /* _CPU_SOFTRST_CTRL_0,     0x380 */
     uint32_t cpu_softrst_ctrl1;         /* _CPU_SOFTRST_CTRL1_0,    0x384 */
     uint32_t cpu_softrst_ctrl2;         /* _CPU_SOFTRST_CTRL2_0,    0x388 */
@@ -456,6 +472,7 @@ typedef struct {
     uint32_t tsecb_super_clk_divider;               /* _TSECB_SUPER_CLK_DIVIDER_0, 0x70c */
     
     uint32_t clk_source_uartape;                    /* _CLK_SOURCE_UARTAPE_0, 0x710 */
+    uint32_t clk_cpug_misc2;                        /* _CLK_CPUG_MISC2_0, 0x714 */
     uint32_t clk_source_dbgapb;                     /* _CLK_SOURCE_DBGAPB_0, 0x718 */
     uint32_t clk_ccplex_cc4_ret_clk_enb;            /* _CLK_CCPLEX_CC4_RET_CLK_ENB_0, 0x71c */
     uint32_t actmon_cpu_clk;                        /* _ACTMON_CPU_CLK_0, 0x720 */

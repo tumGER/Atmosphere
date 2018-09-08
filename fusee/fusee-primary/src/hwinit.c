@@ -1,3 +1,21 @@
+/*
+ * Copyright (c) 2018 naehrwert
+ * Copyright (c) 2018 CTCaer
+ * Copyright (c) 2018 Atmosphère-NX
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU General Public License,
+ * version 2, as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
 #include "hwinit.h"
 #include "apb_misc.h"
 #include "car.h"
@@ -24,7 +42,7 @@ void config_oscillators()
     car->spare_reg0 = ((car->spare_reg0 & 0xFFFFFFF3) | 4);
     
     SYSCTR0_CNTFID0_0 = 19200000;
-    MAKE_TIMERS_REG(0x14) = 0x45F;
+    TIMERUS_USEC_CFG_0 = 0x45F;
     
     car->osc_ctrl = 0x50000071;
     pmc->osc_edpd_over = ((pmc->osc_edpd_over & 0xFFFFFF81) | 0xE);
@@ -203,33 +221,33 @@ void nx_hwinit()
     clkrst_reboot(CARDEVICE_UNK);
 
     /* Initialize I2C1 and I2C5. */
-    i2c_init(0);
-    i2c_init(4);
+    i2c_init(I2C_1);
+    i2c_init(I2C_5);
     
     uint8_t val = 0x40;
-    i2c_send(4, 0x3C, MAX77620_REG_CNFGBBC, &val, 1);
+    i2c_send(I2C_5, MAX77620_PWR_I2C_ADDR, MAX77620_REG_CNFGBBC, &val, 1);
     val = 0x78;
-    i2c_send(4, 0x3C, MAX77620_REG_ONOFFCNFG1, &val, 1);
+    i2c_send(I2C_5, MAX77620_PWR_I2C_ADDR, MAX77620_REG_ONOFFCNFG1, &val, 1);
 
     val = 0x38;
-    i2c_send(4, 0x3C, MAX77620_REG_FPS_CFG0, &val, 1);
+    i2c_send(I2C_5, MAX77620_PWR_I2C_ADDR, MAX77620_REG_FPS_CFG0, &val, 1);
     val = 0x3A;
-    i2c_send(4, 0x3C, MAX77620_REG_FPS_CFG1, &val, 1);
+    i2c_send(I2C_5, MAX77620_PWR_I2C_ADDR, MAX77620_REG_FPS_CFG1, &val, 1);
     val = 0x38;
-    i2c_send(4, 0x3C, MAX77620_REG_FPS_CFG2, &val, 1);
+    i2c_send(I2C_5, MAX77620_PWR_I2C_ADDR, MAX77620_REG_FPS_CFG2, &val, 1);
     val = 0xF;
-    i2c_send(4, 0x3C, MAX77620_REG_FPS_LDO4, &val, 1);
+    i2c_send(I2C_5, MAX77620_PWR_I2C_ADDR, MAX77620_REG_FPS_LDO4, &val, 1);
     val = 0xC7;
-    i2c_send(4, 0x3C, MAX77620_REG_FPS_LDO8, &val, 1);
+    i2c_send(I2C_5, MAX77620_PWR_I2C_ADDR, MAX77620_REG_FPS_LDO8, &val, 1);
     val = 0x4F;
-    i2c_send(4, 0x3C, MAX77620_REG_FPS_SD0, &val, 1);
+    i2c_send(I2C_5, MAX77620_PWR_I2C_ADDR, MAX77620_REG_FPS_SD0, &val, 1);
     val = 0x29;
-    i2c_send(4, 0x3C, MAX77620_REG_FPS_SD1, &val, 1);
+    i2c_send(I2C_5, MAX77620_PWR_I2C_ADDR, MAX77620_REG_FPS_SD1, &val, 1);
     val = 0x1B;
-    i2c_send(4, 0x3C, MAX77620_REG_FPS_SD3, &val, 1);
+    i2c_send(I2C_5, MAX77620_PWR_I2C_ADDR, MAX77620_REG_FPS_SD3, &val, 1);
 
     val = 42;       /* 42 = (1125000 - 600000) / 12500 -> 1.125V */
-    i2c_send(4, 0x3C, MAX77620_REG_SD0, &val, 1);
+    i2c_send(I2C_5, MAX77620_PWR_I2C_ADDR, MAX77620_REG_SD0, &val, 1);
 
     /* Configure and lock PMC scratch registers. */
     config_pmc_scratch();
